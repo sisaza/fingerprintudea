@@ -1,26 +1,13 @@
 # Written by Brian Ejike (2017)
 # Distributed under the MIT License
 
-#import serial, time, wsq
+import serial, time, wsq
 from PIL import Image
-
-WIDTH = 256
-HEIGHT = 288
-READ_LEN = int(WIDTH * HEIGHT / 2)
-
-DEPTH = 8
-HEADER_SZ = 54
-
-portSettings = ['', 0]
-# default port settings
-portSettings[0] = 'COM3'
-portSettings[1] = 57600
-
-print("----------Extract Fingerprint Image------------")
-print()
 
 # assemble bmp header for a grayscale image
 def assembleHeader(width, height, depth, cTable=False):
+    HEADER_SZ = 54
+
     header = bytearray(HEADER_SZ)
     header[0:2] = b'BM'   # bmp signature
     byte_width = int((depth*width + 31) / 32) * 4
@@ -47,44 +34,6 @@ def assembleHeader(width, height, depth, cTable=False):
     #header[50:54] = (0).to_bytes(4, byteorder='little')
     return header
 
-def options():
-    print("Options:")
-    print("\tPress 1 to enter serial port settings")
-    print("\tPress 2 to scan a fingerprint and save the image")
-    print("\tPress 3 to view help")
-    print("\tPress 4 to exit")
-    print()
-    choice = input(">> ")
-    print()
-    return choice
-
-def getSettings():
-    portSettings[0] = input("Enter Arduino serial port number: ")
-    portSettings[1] = int(input('Enter serial port baud rate: '))
-    print()
-
-def getPrint_f(c, f, s):
-    #Fake function for testing
-    #Receives path+file name and returns True/False
-
-    import platform
-    import os
-
-    if 'linux' in platform.system().lower():
-        fname = c + '/' + c + '_' + f + '_' + s + '.png'
-        cmd = 'cp scan_example.png ' + fname
-        #print(cmd)
-        os.system(cmd)
-    elif 'windows' in platform.system().lower():
-        fname = c + '\\' + c + '_' + f + '_' + s + '.png'
-        cmd = 'robocopy /s ' + 'scan_example.png ' + fname
-        #print(cmd)
-        os.system(cmd)
-    else:
-        print('OS not supprted: ' + platform.system())
-        return 'Error'
-
-    return fname
 
 def getPrint(fname):
     '''
@@ -106,6 +55,13 @@ def getPrint(fname):
 
     '''
 
+    global SERIAL_COM, SERIAL_BAUDS
+
+    WIDTH = 256
+    HEIGHT = 288
+    READ_LEN = int(WIDTH * HEIGHT / 2)
+    DEPTH = 8
+
     out = open(fname+'.bmp', 'wb')
     # assemble and write the BMP header to the file
     out.write(assembleHeader(WIDTH, HEIGHT, DEPTH, True))
@@ -114,12 +70,12 @@ def getPrint(fname):
         out.write(i.to_bytes(1,byteorder='little') * 4)
     try:
         # open the port; timeout is 1 sec; also resets the arduino
-        ser = serial.Serial(portSettings[0], portSettings[1], timeout=1)
+        ser = serial.Serial(SERIAL_COM, SERIAL_COM, timeout=1)
     except Exception as e:
         print('Invalid port settings:', e)
         print()
         out.close()
-        return
+        return False
     while ser.isOpen():
         try:
             # assumes everything recved at first is printable ascii
@@ -164,3 +120,35 @@ def getPrint(fname):
             out.close()
             ser.close()
             return False
+
+
+def getPrint_wrapper(c, f, s):
+    #Wrapper function for testing with and without scanner device
+    #Receives strings to build path+file name and returns path+file name
+
+    SERIAL_DEVICE = False
+    fname = c + '/' + c + '_' + f + '_' + s
+    import platform
+
+    if 'windows' in platform.system().lower():
+        fname = fname.replace('/', '\\')
+
+    if SERIAL_DEVICE:
+        if not getPrint(fname):
+            return 'Error'
+        else:
+            fname = fname + '.wsq'
+    else:
+        import os
+        fname = fname + '.png'
+        if 'linux' in platform.system().lower():
+            cmd = 'cp scan_example.png ' + fname
+            os.system(cmd)
+        elif 'windows' in platform.system().lower():
+            cmd = 'robocopy /s ' + 'scan_example.png ' + fname
+            os.system(cmd)
+        else:
+            print('OS not supprted: ' + platform.system())
+            return 'Error'
+
+    return fname
